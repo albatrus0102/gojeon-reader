@@ -1,0 +1,1 @@
+import {attachNotes} from './notes.js';attachNotes({key:'classics-reader-local-notes'});

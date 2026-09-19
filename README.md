@@ -6,3 +6,5 @@ Supabase Auth 및 private Storage로 승인된 사용자에게 콘텐츠를 제�
 설정: `supabase/schema.sql`을 적용하고, 승인할 인증 사용자를 `reader_members`에 추가합니다. `reader-private` 비공개 버킷에 `catalogue.json`을 업로드합니다. `src/config.js`에는 프로젝트 URL과 공개 publishable/anon 키만 설정합니다.
 
 `npm ci`, `npm test`, `npm run build` 후 `docs`를 GitHub Pages로 게시합니다. 비밀 키와 본문 파일은 커밋하지 않습니다.
+
+작품별 메모: `supabase/notes.sql` 적용. 자동 저장, 계정별 접근 제어, 버전 비교를 통한 동시 수정 충돌 보존, 텍스트 내보내기를 지원합니다.

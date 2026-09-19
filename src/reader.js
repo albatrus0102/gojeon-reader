@@ -32,7 +32,7 @@ function render(restore=true){
  document.querySelectorAll('[data-figure]').forEach(b=>b.onclick=()=>{const d=w.diagrams[+b.dataset.figure];$('#zoomImage').src=d.src;$('#zoomImage').style.width='100%';$('#zoomLabel').textContent='KBS 원본';$('#zoom').showModal();});
  $('#reading').onclick=e=>{let m=e.target.closest('mark');if(m&&!getSelection().toString()){askDelete(m.dataset.id);}};
  if(restore&&state.positions[w.id]){restoring=true;requestAnimationFrame(()=>requestAnimationFrame(()=>{restorePosition();restoring=false;}));}else{restoring=true;scrollTo(0,0);requestAnimationFrame(()=>restoring=false);}
- persist();updateProgress();
+ persist();updateProgress();dispatchEvent(new CustomEvent("reader:work",{detail:{id:w.id,title:w.title}}));
 }
 function applyHighlights(){
  const root=$('#reading');if(!root){$('#count').textContent=state.highlights.length;return;}root.querySelectorAll('mark').forEach(m=>m.replaceWith(document.createTextNode(m.textContent)));root.normalize();
