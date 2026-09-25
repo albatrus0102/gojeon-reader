@@ -40,7 +40,7 @@ export function lookupMeanings(work, highlight) {
   const bounds=[];let acc=0;for(const b of work.body){acc+=b.text.length;bounds.push(acc);}
   const blockEnd=i=>bounds.find(b=>b>i)??body.length;
   const atBlockStart=i=>i===0||bounds.includes(i);
-  const notes=(work.notes||[]).map(([term,meaning])=>({term,meaning,source:(work.kind==='verse'?'평가원화':(work.collection||'수특'))+' 각주 · '+work.source,kind:work.kind==='verse'?'문제집 각주':'교재 각주'}));
+  const notes=(work.notes||[]).map(([term,meaning])=>({term,meaning,source:work.kind==='verse'?work.source:(work.collection||'수특')+' 각주 · '+work.source,kind:work.kind==='verse'?'문제집 각주':'교재 각주'}));
   if(work.id==='hwangsae')notes.push(...supplemental.map(n=>({...n,kind:'출처 확인 보충'})));
   const entries=[];
   for(const note of notes){

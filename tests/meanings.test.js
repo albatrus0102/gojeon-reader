@@ -70,7 +70,7 @@ test('verse works: stanza and break blocks keep offsets and workbook notes resol
  const w={id:'ga-test',kind:'verse',collection:'수특',source:'PDF 1쪽',body:[{type:'verse',text:'보고 싶네 임의 얼굴'},{type:'break',text:''},{type:'verse',text:'식불감미하고 침불안석이라'},{type:'stanza',text:'<제1수>'}],notes:[['식불감미','근심으로 음식 맛이 없음.'],['침불안석(寢不安席)','편안히 잠들지 못함.']]};
  const body=w.body.map(b=>b.text).join('');const p=body.indexOf('침불안석이라');
  const r=lookupMeanings(w,{start:p,end:p+6,text:'침불안석이라'});
- assert.equal(r.entries.length,1);assert.equal(r.entries[0].kind,'문제집 각주');assert.ok(r.entries[0].source.startsWith('평가원화 각주'));
+ assert.equal(r.entries.length,1);assert.equal(r.entries[0].kind,'문제집 각주');assert.ok(r.entries[0].source==='PDF 1쪽');
 });
 test('suffix check stops at a block boundary so a note at the end of a verse line resolves',()=>{
  const w={id:'v',kind:'verse',body:[{type:'verse',text:'푸른 것은 산람(山嵐)이라'},{type:'verse',text:'수많은 바위 골짜기를'}],notes:[['산람','산 아지랑이.'],['수많은','많고 많은.']],source:'p'};
