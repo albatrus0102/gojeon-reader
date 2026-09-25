@@ -11,7 +11,7 @@ const stripQuotes = s => s.replace(/^[‘’“”'"「」『』\s]+|[‘’“�
 const baseTerm = s => stripQuotes(s.replace(/\([^)]*\)/g,'')).replace(/(하|되)다$/,'');
 const wordChar = c => !!c && /[가-힣A-Za-z0-9一-鿿]/u.test(c);
 // A suffix is accepted when it is built only from particles and verb endings (하-/되-/치- stems included), so 좌기되기만·추열치·불원천리하옵고 resolve while 소실점 does not.
-const ending = /^(?:은|는|이|가|을|를|의|에|에서|에게|께|도|만|과|와|으로|로|라|나|요|오|온|올|옴|부터|까지|처럼|보다|께서|로서|로써|들|하|되|치|한|된|할|될|함|됨|하는|되는|하던|되던|옵|사오|사옵|사|시|셔|겠|었|였|기|고|여|니|다|며|매|면|되어|리라|리로다|리니|리오|로다|로되|다가|더니|더라|든|든지|지|자|서|야|어|아|게|도록|노라|노니|소서|소이다|나이다|냐|뇨|ㄴ)*$/;
+const ending = /^(?:은|는|이|가|을|를|의|에|에서|에게|께|도|만|과|와|으로|로|라|나|요|오|온|올|옴|부터|까지|처럼|보다|께서|로서|로써|들|하|되|치|한|된|할|될|함|됨|하는|되는|하던|되던|옵|사오|사옵|사|시|셔|겠|었|였|기|고|여|니|다|며|매|면|되어|리라|리로다|리니|리오|로다|로되|다가|더니|더라|든|든지|지|자|서|야|어|아|게|도록|노라|노니|소서|소이다|나이다|냐|뇨|없|ㄴ)*$/;
 
 // Body with hanja glosses removed, plus a map back to original offsets, so 차소위락미지액이로다 matches 차소위락미지액(此所謂落眉之厄)이로다.
 function cleanBody(body){
@@ -36,7 +36,11 @@ export function lookupMeanings(work, highlight) {
   if(!Number.isInteger(start)||!Number.isInteger(end)||start<0||end<=start||body.slice(start,end)!==text)
     return {entries:[],stale:true};
   const clean=cleanBody(body);
-  const notes=(work.notes||[]).map(([term,meaning])=>({term,meaning,source:(work.collection||'수특')+' 각주 · '+work.source,kind:'교재 각주'}));
+  // Block boundaries: verse lines and paragraphs are concatenated without separators, so a suffix must not run into the next block.
+  const bounds=[];let acc=0;for(const b of work.body){acc+=b.text.length;bounds.push(acc);}
+  const blockEnd=i=>bounds.find(b=>b>i)??body.length;
+  const atBlockStart=i=>i===0||bounds.includes(i);
+  const notes=(work.notes||[]).map(([term,meaning])=>({term,meaning,source:(work.kind==='verse'?'평가원화':(work.collection||'수특'))+' 각주 · '+work.source,kind:work.kind==='verse'?'문제집 각주':'교재 각주'}));
   if(work.id==='hwangsae')notes.push(...supplemental.map(n=>({...n,kind:'출처 확인 보충'})));
   const entries=[];
   for(const note of notes){
@@ -56,13 +60,13 @@ export function lookupMeanings(work, highlight) {
       if(/\s/.test(base)||base.length>=6){hit=findAll(clean,base).some(([pos,tailStart])=>pos<end&&tailStart>start);if(hit)break;continue;}
       const ambiguous=notes.filter(n=>baseTerm(n.term)===base).length>1;
       for(const [pos,tailStart] of findAll(clean,base)){
-        if(pos<start||tailStart>end||wordChar(body[pos-1]))continue;
+        if(pos<start||tailStart>end||(!atBlockStart(pos)&&wordChar(body[pos-1])))continue;
         let tail=tailStart;
         const hanja=body.slice(tail).match(/^\([一-鿿㐀-䶿豈-﫿]+\)/u)?.[0]||'';
         if(base.length<2&&!hanja)continue;
         if((ambiguous&&!expected)||(expected&&hanja&&hanja!==expected)||(ambiguous&&hanja!==expected))continue;
         tail+=hanja.length;
-        const suffix=body.slice(tail).match(/^[가-힣A-Za-z0-9一-鿿]*/u)[0];
+        const suffix=body.slice(tail,blockEnd(pos)).match(/^[가-힣A-Za-z0-9一-鿿]*/u)[0];
         if(!ending.test(suffix))continue;
         hit=true;break;
       }

@@ -7,7 +7,10 @@ let state={theme:'sepia',font:null,work:WORKS[0].id,highlights:[],positions:{}},
 try{const loaded=JSON.parse(localStorage.getItem(KEY)||'null');if(loaded&&typeof loaded==='object')Object.assign(state,loaded);if(!Array.isArray(state.highlights))state.highlights=[];if(!state.positions||typeof state.positions!=='object')state.positions={};localStorage.setItem(KEY,JSON.stringify(state));}catch(e){$('#storageWarning').hidden=false;}
 state.font=state.font==null?null:Math.min(26,Math.max(16,Number(state.font)||18.5));if(!['sepia','white','dark'].includes(state.theme))state.theme='sepia';
 const collectionOf=w=>w.collection||'수특';
-const collections=['수특','수완'].filter(c=>WORKS.some(w=>collectionOf(w)===c));
+// Shelves on the home screen: prose by textbook, plus one shelf for verse works.
+const shelfOf=w=>w.kind==='verse'?'시가':collectionOf(w);
+const SHELF={'수특':{tab:'수특 산문',title:'수능특강 고전산문'},'수완':{tab:'수완 산문',title:'수능완성 고전산문'},'시가':{tab:'수특 시가',title:'수능특강 고전시가'}};
+const collections=['수특','수완','시가'].filter(c=>WORKS.some(w=>shelfOf(w)===c));
 if(!collections.includes(state.collection))state.collection=collections[0];
 let atHome=true;
 let current=WORKS.find(w=>w.id===state.work)||WORKS[0];
@@ -18,16 +21,26 @@ function effectiveFont(){return state.font??(tabletWidth.matches?20:18.5);}
 function appearance(){document.body.dataset.theme=state.theme;document.documentElement.style.setProperty('--font',effectiveFont()+'px');$('#fontSize').textContent=effectiveFont()+'px';$('#smaller').disabled=effectiveFont()<=16;$('#larger').disabled=effectiveFont()>=26;document.querySelectorAll('#themes button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.theme===state.theme));}
 function showHome(){
  savePosition();atHome=true;document.body.dataset.view='home';pending=null;getSelection().removeAllRanges();$('#highlightBar').hidden=true;$('#homeButton').hidden=true;$('#workSelect').hidden=true;$('#homeBrand').hidden=false;$('#progress').style.width='0';$('#count').textContent=state.highlights.length;
- const visibleWorks=WORKS.filter(w=>collectionOf(w)===state.collection);
- $('#main').innerHTML=`<div class="home-heading"><div class="eyebrow">2027 수능특강 · 수능완성</div><h1>오늘 읽을 작품</h1><p class="meta">고전산문 ${WORKS.length}작품 · 원문과 함께 읽는 이야기의 맥락</p></div><nav class="collections" aria-label="교재별 작품 목록">${collections.map(c=>`<button data-collection="${c}" aria-pressed="${c===state.collection}">${c}<span>${WORKS.filter(w=>collectionOf(w)===c).length}</span></button>`).join('')}</nav><h2 class="shelf-label">${state.collection==='수완'?'수능완성':'수능특강'} <span>${visibleWorks.length}작품</span></h2><div class="shelf">${visibleWorks.map((w,i)=>`<button class="book" data-work="${w.id}"><span class="book-index">${String(i+1).padStart(2,'0')}</span><span class="book-text"><span class="book-title">${w.title}</span><span class="book-meta">${w.genre} · ${w.author||'작자 미상'}</span></span><span class="book-arrow" aria-hidden="true">›</span></button>`).join('')}</div>`;
+ const visibleWorks=WORKS.filter(w=>shelfOf(w)===state.collection),proseCount=WORKS.filter(w=>w.kind!=='verse').length,verseCount=WORKS.length-proseCount;
+ $('#main').innerHTML=`<div class="home-heading"><div class="eyebrow">2027 수능특강 · 수능완성</div><h1>오늘 읽을 작품</h1><p class="meta">고전산문 ${proseCount}작품${verseCount?` · 고전시가 ${verseCount}작품`:''} · 원문과 함께 읽는 이야기의 맥락</p></div><nav class="collections" aria-label="교재별 작품 목록">${collections.map(c=>`<button data-collection="${c}" aria-pressed="${c===state.collection}">${SHELF[c].tab}<span>${WORKS.filter(w=>shelfOf(w)===c).length}</span></button>`).join('')}</nav><h2 class="shelf-label">${SHELF[state.collection].title} <span>${visibleWorks.length}작품</span></h2><div class="shelf">${visibleWorks.map((w,i)=>`<button class="book" data-work="${w.id}"><span class="book-index">${String(i+1).padStart(2,'0')}</span><span class="book-text"><span class="book-title">${w.title}</span><span class="book-meta">${w.genre} · ${w.author||'작자 미상'}</span></span><span class="book-arrow" aria-hidden="true">›</span></button>`).join('')}</div>`;
  document.querySelectorAll('[data-collection]').forEach(b=>b.onclick=()=>{state.collection=b.dataset.collection;persist();showHome();document.querySelector(`[data-collection="${state.collection}"]`).focus({preventScroll:true});});
  document.querySelectorAll('[data-work]').forEach(b=>b.onclick=()=>{current=WORKS.find(w=>w.id===b.dataset.work);render(false);});scrollTo(0,0);
+}
+// Verse works (가사·시조·민요) keep the printed line breaks; each line is a block so saved ranges work exactly like prose.
+function verseHTML(w,bookLabel){
+ const blocks=w.body.map((b,i)=>b.type==='stanza'?`<p id="b${i}" data-block="${i}" class="stanza">${esc(b.text)}</p>`:b.type==='break'?`<p id="b${i}" data-block="${i}" class="break"></p>`:b.type==='omit'?`<p id="b${i}" data-block="${i}" class="omit">${esc(b.text)}</p>`:`<p id="b${i}" data-block="${i}" class="verse">${esc(b.text)}</p>`).join('');
+ const intro=(w.intro||[]).map(s=>`<p>${esc(s.text).replace(/\n/g,'<br>')}</p><p class="source">${esc(s.source)}</p>`).join('');
+ return `<div class="eyebrow">${bookLabel} 고전시가 · ${esc(w.author||'작자 미상')} · ${esc(w.genre)}</div><h1>${esc(w.title)}</h1><p class="meta">${esc(w.source)}</p><div class="actions"><button class="primary" id="toBody">본문 바로 읽기</button></div>
+ <details id="synopsis"><summary><span class="num">01</span><span>작품 이해<small>${(w.intro||[]).length}개 〈보기〉 · 문제집 해설 그대로</small></span></summary><div class="detail-content synopsis">${intro}<p class="source">${esc(w.introNote||'')}</p></div></details>
+ <section class="excerpt-section" id="excerpt"><h2 class="section-title"><span class="num">02</span>${bookLabel} 본문</h2><p class="source">${esc(w.source)}<br>단어나 구절을 길게 눌러 표시할 수 있어요.</p><div class="reading verse-body" id="reading">${blocks}</div><p class="source">— ${esc(w.author||'작자 미상')}, 「${esc(w.title)}」</p></section>
+ <section class="bottom-section" id="notes"><h2 class="section-title"><span class="num">03</span>각주·낱말</h2><dl class="notes">${w.notes.length?w.notes.map(n=>`<div><dt>${esc(n[0])}</dt><dd>${esc(n[1])}</dd></div>`).join(''):'<div class=source>이 수록 대목에는 별도로 실린 각주가 없습니다.</div>'}</dl><p class="source">평가원화 문제집 수록 각주</p></section>
+ <footer>본문은 업로드된 평가원화 2027 수능특강 문학 PDF 기준입니다. 문항용 기호·밑줄·[A]~[E] 표시는 제외하고, 한자 병기·행 구분·(중략)·각주는 지면 그대로 두었습니다. 지면에서 한 행이 두 줄로 나뉜 곳은 이어 붙였습니다.<br><br>고전 읽기 · 고전시가</footer>`;
 }
 function render(restore=true){
  atHome=false;document.body.dataset.view='reader';$('#homeButton').hidden=false;$('#workSelect').hidden=false;$('#homeBrand').hidden=true;
  pending=null;$('#highlightBar').hidden=true;state.work=current.id;$('#workSelect').value=current.id;
- const w=current,collection=collectionOf(w),bookLabel=collection==='수완'?'수능완성':'수능특강';state.collection=collection;
- $('#main').innerHTML=`<div class="eyebrow">${bookLabel} 문학 · ${w.author||'작자 미상'} · ${w.genre}</div><h1>${w.title}</h1><p class="meta">${w.source}</p><div class="actions"><button class="primary" id="toBody">본문 바로 읽기</button></div>
+ const w=current,collection=collectionOf(w),bookLabel=collection==='수완'?'수능완성':'수능특강';state.collection=shelfOf(w);
+ $('#main').innerHTML=w.kind==='verse'?verseHTML(w,bookLabel):`<div class="eyebrow">${bookLabel} 문학 · ${w.author||'작자 미상'} · ${w.genre}</div><h1>${w.title}</h1><p class="meta">${w.source}</p><div class="actions"><button class="primary" id="toBody">본문 바로 읽기</button></div>
  <details id="synopsis"><summary><span class="num">01</span><span>전체 줄거리<small>${w.synopsis.length}개 ${w.id==='kkokdu'?'거리':'장면'} · 처음부터 결말까지</small></span></summary><div class="detail-content synopsis"><p class="source">${w.synSource} / 원문 페이지를 확인해 재서술한 줄거리</p>${w.synopsis.map((s,i)=>`<h3><span>${String(i+1).padStart(2,'0')}</span>${esc(s[0])}</h3><p>${esc(s[1])}</p>`).join('')}</div></details>
  <details id="diagrams"><summary><span class="num">02</span><span>${w.diagramTitle}<small>KBS 원본 · 눌러서 확대</small></span></summary><div class="detail-content">${w.diagrams.map((d,i)=>`<button class="figure-button" data-figure="${i}" aria-label="${esc(d.caption)} 확대"><img src="${d.src}" alt="${esc(d.caption)}"></button><p class="caption">${d.caption} · 눌러서 크게 보기</p>`).join('')}</div></details>
  <section class="position"><h2><span class="num">03</span>${collection}은 이 부분</h2><p>${w.location}</p>${w.variantNote?`<p class="source">${esc(w.variantNote)}</p>`:""}<ol class="timeline">${w.timeline.map(t=>`<li class="${t.startsWith(collection)?'current':''}">${t}</li>`).join('')}</ol></section>
@@ -72,7 +85,7 @@ function savePosition(){if(restoring||atHome)return;let nodes=[...document.query
 function restorePosition(){const p=state.positions[current.id];if(!p)return;const n=document.getElementById('b'+p.block);if(n)scrollTo(0,scrollY+n.getBoundingClientRect().top+p.fraction*n.getBoundingClientRect().height-80);else scrollTo(0,p.y||0);}
 function updateProgress(){const root=$('#reading');if(!root)return;const r=root.getBoundingClientRect(),total=r.height;const pct=Math.max(0,Math.min(100,(80-r.top)/total*100));$('#progress').style.width=pct+'%';}
 let scrollTimer;addEventListener('scroll',()=>{updateProgress();clearTimeout(scrollTimer);scrollTimer=setTimeout(savePosition,250);},{passive:true});addEventListener('pagehide',savePosition);document.addEventListener('visibilitychange',()=>{if(document.hidden)savePosition();});
-$('#workSelect').innerHTML=collections.map(c=>`<optgroup label="${c==='수완'?'수능완성':'수능특강'}">${WORKS.filter(w=>collectionOf(w)===c).map(w=>`<option value="${w.id}">${w.title}</option>`).join('')}</optgroup>`).join('');$('#workSelect').onchange=e=>{savePosition();current=WORKS.find(w=>w.id===e.target.value);render();};
+$('#workSelect').innerHTML=collections.map(c=>`<optgroup label="${SHELF[c].title}">${WORKS.filter(w=>shelfOf(w)===c).map(w=>`<option value="${w.id}">${w.title}</option>`).join('')}</optgroup>`).join('');$('#workSelect').onchange=e=>{savePosition();current=WORKS.find(w=>w.id===e.target.value);render();};
 $('#settingsButton').onclick=()=>$('#settings').showModal();$('#listButton').onclick=()=>{renderSaved();$('#saved').showModal();};
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>b.closest('dialog').close());
 $('#themes').querySelectorAll('button').forEach(b=>b.onclick=()=>{state.theme=b.dataset.theme;appearance();persist();});
