@@ -36,8 +36,9 @@ function verseHTML(w,bookLabel){
  <section class="bottom-section" id="notes"><h2 class="section-title"><span class="num">03</span>각주·낱말</h2><dl class="notes">${w.notes.length?w.notes.map(n=>`<div><dt>${esc(n[0])}</dt><dd>${esc(n[1])}</dd></div>`).join(''):'<div class=source>이 수록 대목에는 별도로 실린 각주가 없습니다.</div>'}</dl><p class="source">평가원화 문제집 수록 각주</p></section>
  <footer>본문은 업로드된 평가원화 2027 수능특강 문학 PDF 기준입니다. 문항용 기호·밑줄·[A]~[E] 표시는 제외하고, 한자 병기·행 구분·(중략)·각주는 지면 그대로 두었습니다. 지면에서 한 행이 두 줄로 나뉜 곳은 이어 붙였습니다.<br><br>고전 읽기 · 고전시가</footer>`;
 }
-// One colour per genre instead of a picker: prose yellow, verse green.
-const highlightColor=w=>w&&w.kind==='verse'?'green':'yellow';
+// Single highlight colour; older green/pink highlights still render with their saved colour.
+const highlightColor=()=>'yellow';
+let savedTab='prose';
 function render(restore=true){
  atHome=false;$('#addHighlight').className='color '+highlightColor(current);document.body.dataset.view='reader';$('#homeButton').hidden=false;$('#workSelect').hidden=false;$('#homeBrand').hidden=true;
  pending=null;$('#highlightBar').hidden=true;state.work=current.id;$('#workSelect').value=current.id;
@@ -85,9 +86,14 @@ function renderSaved(){const list=$('#savedItems');
  // Group by work in catalogue order; the work being read opens first, the rest stay folded so long lists stay scannable.
  const groups=new Map();for(const h of state.highlights){if(!groups.has(h.work))groups.set(h.work,[]);groups.get(h.work).push(h);}
  const order=[...groups.keys()].sort((a,b)=>WORKS.findIndex(w=>w.id===a)-WORKS.findIndex(w=>w.id===b));
- const openId=!atHome&&groups.has(current.id)?current.id:order[0];
- const item=h=>{const w=WORKS.find(w=>w.id===h.work);return `<div class="saved-item"><small><span class="saved-swatch ${h.color}"></span>${esc(w?SHELF[shelfOf(w)].tab:'작품')}</small><p>${esc(excerptLabel(h))}</p>${meaningSlot(w,h)}<button data-jump="${h.id}">본문에서 보기</button><button data-delete="${h.id}">삭제</button></div>`;};
- list.innerHTML=state.highlights.length?order.map(id=>{const w=WORKS.find(w=>w.id===id),items=groups.get(id).sort((a,b)=>a.start-b.start);return `<details class="saved-group"${id===openId?' open':''}><summary><span class="saved-group-title">${esc(w?w.title:'작품')}<small>${esc(w?SHELF[shelfOf(w)].tab:'')} · ${items.length}개${id===current.id&&!atHome?' · 지금 읽는 작품':''}</small></span><span class="saved-dots"><span class="saved-swatch ${highlightColor(w)}"></span></span></summary>${items.map(item).join('')}</details>`;}).join(''):'<p style="margin-top:25px">아직 표시한 문장이 없어요. 본문에서 단어나 문장을 선택하고 색을 골라 보세요.</p>';
+ const kindOf=id=>{const w=WORKS.find(w=>w.id===id);return w&&w.kind==='verse'?'verse':'prose';};
+ const counts={prose:0,verse:0};for(const h of state.highlights)counts[kindOf(h.work)]++;
+ const shown=order.filter(id=>kindOf(id)===savedTab);
+ const openId=!atHome&&groups.has(current.id)&&kindOf(current.id)===savedTab?current.id:shown[0];
+ const tabs=`<nav class="collections saved-tabs" aria-label="갈래별 표시 목록"><button data-saved-tab="prose" aria-pressed="${savedTab==='prose'}">산문<span>${counts.prose}</span></button><button data-saved-tab="verse" aria-pressed="${savedTab==='verse'}">시가<span>${counts.verse}</span></button></nav>`;
+ const item=h=>{const w=WORKS.find(w=>w.id===h.work);return `<div class="saved-item"><small>${esc(w?SHELF[shelfOf(w)].tab:'작품')}</small><p>${esc(excerptLabel(h))}</p>${meaningSlot(w,h)}<button data-jump="${h.id}">본문에서 보기</button><button data-delete="${h.id}">삭제</button></div>`;};
+ list.innerHTML=tabs+(shown.length?shown.map(id=>{const w=WORKS.find(w=>w.id===id),items=groups.get(id).sort((a,b)=>a.start-b.start);return `<details class="saved-group"${id===openId?' open':''}><summary><span class="saved-group-title">${esc(w?w.title:'작품')}<small>${esc(w?SHELF[shelfOf(w)].tab:'')} · ${items.length}개${id===current.id&&!atHome?' · 지금 읽는 작품':''}</small></span></summary>${items.map(item).join('')}</details>`;}).join(''):`<p style="margin-top:25px">${savedTab==='verse'?'시가':'산문'}에서 표시한 문장이 아직 없어요. 본문에서 단어나 문장을 선택하고 ‘표시하기’를 눌러 보세요.</p>`);
+ list.querySelectorAll('[data-saved-tab]').forEach(b=>b.onclick=()=>{savedTab=b.dataset.savedTab;renderSaved();});
  list.querySelectorAll('details.saved-group').forEach(d=>{if(d.open)hydrateMeanings(d);d.addEventListener('toggle',()=>{if(d.open)hydrateMeanings(d);});});
  list.querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>askDelete(b.dataset.delete));list.querySelectorAll('[data-jump]').forEach(b=>b.onclick=()=>{const h=state.highlights.find(h=>h.id===b.dataset.jump);savePosition();current=WORKS.find(w=>w.id===h.work);$('#saved').close();render(false);requestAnimationFrame(()=>{const m=$('#reading').querySelector(`mark[data-id="${h.id}"]`);if(m)m.scrollIntoView({block:'center'});});});}
 function savePosition(){if(restoring||atHome)return;let nodes=[...document.querySelectorAll('#reading [data-block]')],n=nodes.find(n=>n.getBoundingClientRect().bottom>90);const inBody=$('#excerpt')&&$('#excerpt').getBoundingClientRect().top<100;state.positions[current.id]=inBody&&n?{block:+n.dataset.block,fraction:Math.max(0,(80-n.getBoundingClientRect().top)/n.getBoundingClientRect().height)}:{y:scrollY};persist();}
@@ -95,7 +101,7 @@ function restorePosition(){const p=state.positions[current.id];if(!p)return;cons
 function updateProgress(){const root=$('#reading');if(!root)return;const r=root.getBoundingClientRect(),total=r.height;const pct=Math.max(0,Math.min(100,(80-r.top)/total*100));$('#progress').style.width=pct+'%';}
 let scrollTimer;addEventListener('scroll',()=>{updateProgress();clearTimeout(scrollTimer);scrollTimer=setTimeout(savePosition,250);},{passive:true});addEventListener('pagehide',savePosition);document.addEventListener('visibilitychange',()=>{if(document.hidden)savePosition();});
 $('#workSelect').innerHTML=collections.map(c=>`<optgroup label="${SHELF[c].title}">${WORKS.filter(w=>shelfOf(w)===c).map(w=>`<option value="${w.id}">${w.title}</option>`).join('')}</optgroup>`).join('');$('#workSelect').onchange=e=>{savePosition();current=WORKS.find(w=>w.id===e.target.value);render();};
-$('#settingsButton').onclick=()=>$('#settings').showModal();$('#listButton').onclick=()=>{renderSaved();$('#saved').showModal();};
+$('#settingsButton').onclick=()=>$('#settings').showModal();$('#listButton').onclick=()=>{if(!atHome)savedTab=current.kind==='verse'?'verse':'prose';renderSaved();$('#saved').showModal();};
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>b.closest('dialog').close());
 $('#themes').querySelectorAll('button').forEach(b=>b.onclick=()=>{state.theme=b.dataset.theme;appearance();persist();});
 function changeFont(delta){savePosition();state.font=Math.max(16,Math.min(26,effectiveFont()+delta));appearance();persist();if(!atHome)restorePosition();}
