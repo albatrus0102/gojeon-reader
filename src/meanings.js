@@ -79,8 +79,8 @@ export function lookupMeanings(work, highlight) {
 
 export function meaningHTML(work,h,esc){
   const {entries,stale}=lookupMeanings(work,h);
-  const content=entries.length?entries.map(n=>`<div class="meaning-entry"><p><strong>${esc(n.term)}</strong> · ${esc(n.meaning)}</p><small>${esc(n.kind)}${n.url?` · <a href="${esc(n.url)}" target="_blank" rel="noopener noreferrer">${esc(n.source)}</a>`:` · ${esc(n.source)}`}</small></div>`).join(''):`<p class="meaning-empty">${stale?'본문 위치가 달라 풀이를 연결하지 않았어요. 본문에서 다시 표시해 주세요.':'확인된 풀이가 아직 없어요. 추측한 뜻은 표시하지 않아요.'}</p>`;
   const glosses=work&&!stale?hanjaGloss(work,glossedText(work,h)):[];
+  const content=entries.length?entries.map(n=>`<div class="meaning-entry"><p><strong>${esc(n.term)}</strong> · ${esc(n.meaning)}</p><small>${esc(n.kind)}${n.url?` · <a href="${esc(n.url)}" target="_blank" rel="noopener noreferrer">${esc(n.source)}</a>`:` · ${esc(n.source)}`}</small></div>`).join(''):`<p class="meaning-empty">${stale?'본문 위치가 달라 풀이를 연결하지 않았어요. 본문에서 다시 표시해 주세요.':(glosses.length?'낱말 풀이는 아직 없어요. 아래 글자별 뜻을 참고하세요.':'확인된 풀이가 아직 없어요. 추측한 뜻은 표시하지 않아요.')}</p>`;
   const hanja=glosses.length?`<div class="meaning-entry hanja"><p>${glosses.map(g=>`<span class="hanja-char">${esc(g.char)}</span> ${esc(g.gloss)}`).join(' · ')}</p><small>한자 훈음 · 글자별 뜻 (libhangul 한자 자료)</small></div>`:'';
   const query=h.text.trim();
   const dictionary=query.length<=40?`<a class="dictionary-link" href="https://ko.dict.naver.com/#/search?query=${encodeURIComponent(query)}" target="_blank" rel="noopener noreferrer">국어사전에서 찾기 ↗</a>`:'';
