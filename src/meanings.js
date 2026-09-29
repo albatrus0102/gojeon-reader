@@ -5,11 +5,11 @@ const supplemental = [
   {term:'불분동서', meaning:'동쪽·서쪽을 가리지 않음. 이 대목에서는 여기저기 다니는 모습을 나타냄.', url:'https://files-scs.pstatic.net/2023/09/10/2TrWWvelht/황새결송(현대어역)-전문+해설.pdf#page=1', source:'장석규 역주 · 황새결송 1쪽'},
   {term:'유리표박', meaning:'정해진 생업 없이 이곳저곳 떠돌아다님.', url:'https://files-scs.pstatic.net/2023/09/10/2TrWWvelht/황새결송(현대어역)-전문+해설.pdf#page=1', source:'장석규 역주 · 황새결송 1쪽'}
 ];
-const HANJA = /[一-鿿㐀-䶿豈-﫿]/u;
+const HANJA = /[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/u;
 const stripQuotes = s => s.replace(/^[‘’“”'"「」『』\s]+|[‘’“”'"「」『』\s.]+$/g,'');
 // Dictionary form of a note term: no hanja gloss, no quotes, no 하다/되다 headword ending.
 const baseTerm = s => stripQuotes(s.replace(/\([^)]*\)/g,'')).replace(/(하|되)다$/,'');
-const wordChar = c => !!c && /[가-힣A-Za-z0-9一-鿿]/u.test(c);
+const wordChar = c => !!c && /[가-힣A-Za-z0-9\u4E00-\u9FFF]/u.test(c);
 // A suffix is accepted when it is built only from particles and verb endings (하-/되-/치- stems included), so 좌기되기만·추열치·불원천리하옵고 resolve while 소실점 does not.
 const ending = /^(?:은|는|이|가|을|를|의|에|에서|에게|께|도|만|과|와|으로|로|라|나|요|오|온|올|옴|부터|까지|처럼|보다|께서|로서|로써|들|하|되|치|한|된|할|될|함|됨|하는|되는|하던|되던|옵|사오|사옵|사|시|셔|겠|었|였|기|고|여|니|다|며|매|면|되어|리라|리로다|리니|리오|로다|로되|다가|더니|더라|든|든지|지|자|서|야|어|아|게|도록|노라|노니|소서|소이다|나이다|냐|뇨|없|ㄴ)*$/;
 
@@ -17,7 +17,7 @@ const ending = /^(?:은|는|이|가|을|를|의|에|에서|에게|께|도|만|�
 function cleanBody(body){
   let text='',map=[];
   for(let i=0;i<body.length;i++){
-    if(body[i]==='('){const close=body.indexOf(')',i);if(close>i+1&&HANJA.test(body.slice(i+1,close))&&!/[^一-鿿㐀-䶿豈-﫿·,\s]/u.test(body.slice(i+1,close))){i=close;continue;}}
+    if(body[i]==='('){const close=body.indexOf(')',i);if(close>i+1&&HANJA.test(body.slice(i+1,close))&&!/[^\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF·,\s]/u.test(body.slice(i+1,close))){i=close;continue;}}
     text+=body[i];map.push(i);
   }
   return {text,map};
@@ -62,11 +62,11 @@ export function lookupMeanings(work, highlight) {
       for(const [pos,tailStart] of findAll(clean,base)){
         if(pos<start||tailStart>end||(!atBlockStart(pos)&&wordChar(body[pos-1])))continue;
         let tail=tailStart;
-        const hanja=body.slice(tail).match(/^\([一-鿿㐀-䶿豈-﫿]+\)/u)?.[0]||'';
+        const hanja=body.slice(tail).match(/^\([\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]+\)/u)?.[0]||'';
         if(base.length<2&&!hanja)continue;
         if((ambiguous&&!expected)||(expected&&hanja&&hanja!==expected)||(ambiguous&&hanja!==expected))continue;
         tail+=hanja.length;
-        const suffix=body.slice(tail,blockEnd(pos)).match(/^[가-힣A-Za-z0-9一-鿿]*/u)[0];
+        const suffix=body.slice(tail,blockEnd(pos)).match(/^[가-힣A-Za-z0-9\u4E00-\u9FFF]*/u)[0];
         if(!ending.test(suffix))continue;
         hit=true;break;
       }
@@ -80,14 +80,16 @@ export function lookupMeanings(work, highlight) {
 export function meaningHTML(work,h,esc){
   const {entries,stale}=lookupMeanings(work,h);
   const content=entries.length?entries.map(n=>`<div class="meaning-entry"><p><strong>${esc(n.term)}</strong> · ${esc(n.meaning)}</p><small>${esc(n.kind)}${n.url?` · <a href="${esc(n.url)}" target="_blank" rel="noopener noreferrer">${esc(n.source)}</a>`:` · ${esc(n.source)}`}</small></div>`).join(''):`<p class="meaning-empty">${stale?'본문 위치가 달라 풀이를 연결하지 않았어요. 본문에서 다시 표시해 주세요.':'확인된 풀이가 아직 없어요. 추측한 뜻은 표시하지 않아요.'}</p>`;
+  const glosses=work&&!stale?hanjaGloss(work,glossedText(work,h)):[];
+  const hanja=glosses.length?`<div class="meaning-entry hanja"><p>${glosses.map(g=>`<span class="hanja-char">${esc(g.char)}</span> ${esc(g.gloss)}`).join(' · ')}</p><small>한자 훈음 · 글자별 뜻 (libhangul 한자 자료)</small></div>`:'';
   const query=h.text.trim();
   const dictionary=query.length<=40?`<a class="dictionary-link" href="https://ko.dict.naver.com/#/search?query=${encodeURIComponent(query)}" target="_blank" rel="noopener noreferrer">국어사전에서 찾기 ↗</a>`:'';
-  return `<div class="highlight-meaning">${entries.length&&query.length>40?'<small>선택한 구절에 포함된 낱말 풀이</small>':''}${content}${dictionary}</div>`;
+  return `<div class="highlight-meaning">${entries.length&&query.length>40?'<small>선택한 구절에 포함된 낱말 풀이</small>':''}${content}${hanja}${dictionary}</div>`;
 }
 
 // A highlight that ends on a word carrying a hanja gloss, e.g. 송죽(松竹), is widened to include the gloss
 // (also when the selection stopped inside the parentheses), so the saved text keeps the evidence for which word it is.
-const GLOSS=/^\([一-鿿㐀-䶿豈-﫿·,\s]+\)/u;
+const GLOSS=/^\([\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF·,\s]+\)/u;
 export function includeGloss(body,start,end){
   if(!(end>start))return end;
   const after=body.slice(end).match(GLOSS);
@@ -95,6 +97,22 @@ export function includeGloss(body,start,end){
   const open=body.lastIndexOf('(',end-1);
   if(open>start&&!body.slice(open,end).includes(')')){const m=body.slice(open).match(GLOSS);if(m&&open+m[0].length>end)return open+m[0].length;}
   return end;
+}
+
+// 훈음 for the hanja in a highlight, from the work's `hanja` map (libhangul data, resolved per reading at build time).
+const HJCHAR=/[一-鿿㐀-䶿豈-﫿]/u;
+export function hanjaGloss(work,text){
+  const map=work&&work.hanja;if(!map||!text)return [];
+  const out=[],seen=new Set();
+  const add=(c,r)=>{const g=(r&&map[c+r])||map[c];if(!g||seen.has(c))return;seen.add(c);out.push({char:c,gloss:g});};
+  const rest=text.replace(/([가-힣]*)\(([一-鿿㐀-䶿豈-﫿]+)\)/gu,(m,ko,hj)=>{const cs=[...hj],rs=ko.length>=cs.length?[...ko.slice(-cs.length)]:[];cs.forEach((c,i)=>add(c,rs[i]));return ' ';});
+  for(const c of rest)if(HJCHAR.test(c))add(c);
+  return out;
+}
+// Highlight text plus the gloss that directly follows it in the body (older highlights were saved without it).
+export function glossedText(work,h){
+  const body=work.body.map(b=>b.text).join('');
+  return body.slice(h.start,h.end)===h.text?h.text+body.slice(h.end,includeGloss(body,h.start,h.end)):h.text;
 }
 
 // Rendering for external lookups returned by the `meaning` edge function: {term,matched,dictionary,ai}.

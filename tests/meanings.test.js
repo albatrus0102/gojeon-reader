@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {lookupMeanings,meaningHTML,externalHTML,includeGloss} from '../src/meanings.js';
+import {lookupMeanings,meaningHTML,externalHTML,includeGloss,hanjaGloss,glossedText} from '../src/meanings.js';
 const work=(text,notes,id='test')=>({id,body:[{text}],notes,source:'시험 PDF'});
 const mark=(w,text)=>({start:w.body[0].text.indexOf(text),end:w.body[0].text.indexOf(text)+text.length,text});
 test('existing highlights get exact source note without mutating saved ranges',()=>{
@@ -84,5 +84,22 @@ test('a selection is widened to take in the hanja gloss that follows or surround
  assert.equal(body.slice(s,includeGloss(body,s,s+4)),'송죽(松竹)');           // ended inside the gloss
  assert.equal(body.slice(s,includeGloss(body,s,s+6)),'송죽(松竹)');           // already complete
  const t=body.indexOf('정자');assert.equal(includeGloss(body,t,t+2),t+2);       // no gloss: unchanged
- const n='임은 (웃으며) 말했다';assert.equal(includeGloss(n,0,2),2);           // a non-hanja parenthesis is left alone
+ const n='임은(웃으며) 말했다';assert.equal(includeGloss(n,0,2),2);           // a non-hanja parenthesis is left alone
+});
+test('a Korean parenthesis is never read as a hanja gloss',()=>{
+ const w=work('종인(웃으며)이 말했다.',[['종인(宗人)','먼 일가']]);
+ assert.equal(lookupMeanings(w,mark(w,'종인')).entries.length,1);   // no local hanja, so the single note applies
+ const v=work('종인(種人)이 말했다.',[['종인(宗人)','먼 일가']]);
+ assert.equal(lookupMeanings(v,mark(v,'종인')).entries.length,0);   // different hanja: not this word
+});
+test('hanja in a highlight gets per-character glosses chosen by reading, without inventing any',()=>{
+ const w={id:'v',kind:'verse',source:'p',notes:[],body:[{type:'verse',text:'설빈화안(雪鬢花顔) 어디 가고 낙(樂)이라'}],hanja:{'雪설':'눈 설','雪':'눈 설','鬢빈':'살쩍 빈','花화':'꽃 화','顔안':'얼굴 안','樂낙':'즐길 낙','樂':'즐길 락 / 풍류 악'}};
+ const g=hanjaGloss(w,'설빈화안(雪鬢花顔)');assert.deepEqual(g.map(x=>x.char+x.gloss),['雪눈 설','鬢살쩍 빈','花꽃 화','顔얼굴 안']);
+ assert.equal(hanjaGloss(w,'낙(樂)')[0].gloss,'즐길 낙');
+ assert.equal(hanjaGloss(w,'樂')[0].gloss,'즐길 락 / 풍류 악');
+ assert.deepEqual(hanjaGloss(w,'어디 가고'),[]);assert.deepEqual(hanjaGloss({...w,hanja:undefined},'설빈(雪鬢)'),[]);
+ const body=w.body[0].text,h={start:0,end:4,text:'설빈화안'};
+ assert.equal(glossedText(w,h),'설빈화안(雪鬢花顔)');
+ const esc=s=>String(s).replaceAll('<','&lt;');const html=meaningHTML(w,h,esc);
+ assert.ok(html.includes('한자 훈음')&&html.includes('살쩍 빈')&&!html.includes('교재 각주'));
 });

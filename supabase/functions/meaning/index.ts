@@ -48,12 +48,13 @@ async function opendict(term: string, key: string): Promise<Sense[]> {
 }
 
 type AI = {sense: number | null; meaning: string; context: string; model: string; at: string};
-async function gemini(term: string, context: string, senses: Sense[], key: string): Promise<AI | null> {
+async function gemini(term: string, context: string, senses: Sense[], key: string, gloss = ''): Promise<AI | null> {
   const model = Deno.env.get('GEMINI_MODEL') || 'gemini-3.5-flash-lite';
   const senseList = senses.map((s, i) => `${i + 1}. [${s.pos}${s.origin ? ' · ' + s.origin : ''}] ${s.definition}`).join('\n');
-  const prompt = senses.length
+  const hint = gloss ? `\n\n한자 훈음(사전 자료, 글자별 뜻): ${gloss}\n이 훈음에 근거해 뜻을 풀이하고, 훈음과 어긋나는 뜻은 적지 마세요.` : '';
+  const prompt = (senses.length
     ? `다음은 한국 고전소설 본문의 한 대목과, 그 안에서 학생이 표시한 낱말 "${term}"의 국어사전(우리말샘) 뜻풀이 후보입니다.\n\n본문:\n${context}\n\n뜻풀이 후보:\n${senseList}\n\n이 문맥에 맞는 후보 번호(sense)를 고르고, 학생이 이해하기 쉽게 이 문맥에서 어떤 뜻으로 쓰였는지 한 문장(context)으로 설명하세요. 어느 후보도 맞지 않으면 sense는 null로 두고 meaning에 추정 뜻을 적되 확신이 없으면 "확인 필요"라고 적으세요. JSON만 출력: {"sense": 번호 또는 null, "meaning": "짧은 뜻", "context": "문맥 설명 한 문장"}`
-    : `다음은 한국 고전소설 본문의 한 대목입니다. 학생이 표시한 낱말 "${term}"은 국어사전에서 찾지 못했습니다.\n\n본문:\n${context}\n\n한자어 구성이나 문맥으로 미루어 가장 가능성 높은 뜻을 짧게 적고(meaning), 이 문맥에서의 쓰임을 한 문장으로 설명하세요(context). 확신이 낮으면 meaning 앞에 "(추정)"을 붙이세요. 지어내지 말고 모르면 "확인 필요"라고 적으세요. JSON만 출력: {"sense": null, "meaning": "...", "context": "..."}`;
+    : `다음은 한국 고전소설 본문의 한 대목입니다. 학생이 표시한 낱말 "${term}"은 국어사전에서 찾지 못했습니다.\n\n본문:\n${context}\n\n한자어 구성이나 문맥으로 미루어 가장 가능성 높은 뜻을 짧게 적고(meaning), 이 문맥에서의 쓰임을 한 문장으로 설명하세요(context). 확신이 낮으면 meaning 앞에 "(추정)"을 붙이세요. 지어내지 말고 모르면 "확인 필요"라고 적으세요. JSON만 출력: {"sense": null, "meaning": "...", "context": "..."}`) + hint;
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({contents: [{parts: [{text: prompt}]}], generationConfig: {temperature: 0.2, responseMimeType: 'application/json', maxOutputTokens: 300}}),
@@ -83,9 +84,9 @@ Deno.serve(async (req) => {
   const {data: member} = await user.from('reader_members').select('user_id').eq('user_id', me.id).maybeSingle();
   if (!member) return json({error: 'forbidden'}, 403);
 
-  let body: {work?: string; term?: string; context?: string; refresh?: boolean};
+  let body: {work?: string; term?: string; context?: string; gloss?: string; refresh?: boolean};
   try { body = await req.json(); } catch { return json({error: 'bad json'}, 400); }
-  const work = String(body.work ?? '').slice(0, 64), term = String(body.term ?? '').trim().slice(0, 40), context = String(body.context ?? '').slice(0, 600);
+  const work = String(body.work ?? '').slice(0, 64), term = String(body.term ?? '').trim().slice(0, 40), context = String(body.context ?? '').slice(0, 600), gloss = String(body.gloss ?? '').replace(/[\n\r`]/g, ' ').slice(0, 300);
   if (!work || term.length < 1 || term.length > 40) return json({error: 'bad input'}, 400);
 
   const admin = createClient(url, service);
@@ -109,7 +110,7 @@ Deno.serve(async (req) => {
   }
   let ai: AI | null = null;
   const shown = (matched ?? stripGloss(term)) + (hanja ? `(${hanja})` : '');
-  if (geminiKey && context) ai = await gemini(shown, context, dictionary, geminiKey);
+  if (geminiKey && context) ai = await gemini(shown, context, dictionary, geminiKey, gloss);
 
   const row = {work, term, matched, dictionary, ai: ai ? {...ai, originMatched} : (originMatched ? {sense: null, meaning: '', context: '', model: '', at: new Date().toISOString(), originMatched} : null), updated_at: new Date().toISOString()};
   const {error} = await admin.from('reader_meanings').upsert(row);
