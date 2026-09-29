@@ -79,12 +79,17 @@ export function lookupMeanings(work, highlight) {
 
 export function meaningHTML(work,h,esc){
   const {entries,stale}=lookupMeanings(work,h);
-  const glosses=work&&!stale?hanjaGloss(work,glossedText(work,h)):[];
-  const content=entries.length?entries.map(n=>`<div class="meaning-entry"><p><strong>${esc(n.term)}</strong> · ${esc(n.meaning)}</p><small>${esc(n.kind)}${n.url?` · <a href="${esc(n.url)}" target="_blank" rel="noopener noreferrer">${esc(n.source)}</a>`:` · ${esc(n.source)}`}</small></div>`).join(''):`<p class="meaning-empty">${stale?'본문 위치가 달라 풀이를 연결하지 않았어요. 본문에서 다시 표시해 주세요.':(glosses.length?'낱말 풀이는 아직 없어요. 아래 글자별 뜻을 참고하세요.':'확인된 풀이가 아직 없어요. 추측한 뜻은 표시하지 않아요.')}</p>`;
-  const hanja=glosses.length?`<div class="meaning-entry hanja"><p>${glosses.map(g=>`<span class="hanja-char">${esc(g.char)}</span> ${esc(g.gloss)}`).join(' · ')}</p><small>한자 훈음 · 글자별 뜻 (libhangul 한자 자료)</small></div>`:'';
+  const shown=work&&!stale?glossedText(work,h):h.text;
+  const glosses=work&&!stale?hanjaGloss(work,shown):[];
   const query=h.text.trim();
+  // Head: the word with its hanja spelled out character by character. A longer passage shows the characters only.
+  const single=shown.trim().match(/^([가-힣]+)\([一-鿿㐀-䶿豈-﫿]+\)[가-힣]*$/u);
+  const chips=glosses.map(g=>`<span class="hanja-chip"><b>${esc(g.char)}</b><span>${esc(g.gloss)}</span></span>`).join('');
+  const head=glosses.length?`<div class="meaning-head">${single?`<span class="meaning-word">${esc(single[1])}</span>`:''}<span class="hanja-chips">${chips}</span></div>`:'';
+  const notes=entries.map(n=>`<div class="meaning-entry note"><small class="meaning-label">${esc(n.kind)} · ${n.url?`<a href="${esc(n.url)}" target="_blank" rel="noopener noreferrer">${esc(n.source)}</a>`:esc(n.source)}</small><p><strong>${esc(n.term)}</strong> · ${esc(n.meaning)}</p></div>`).join('');
+  const empty=entries.length?'':`<p class="meaning-empty">${stale?'본문 위치가 달라 풀이를 연결하지 않았어요. 본문에서 다시 표시해 주세요.':(glosses.length?'낱말 풀이는 아직 없어요. 위 글자별 뜻을 참고하세요.':'확인된 풀이가 아직 없어요. 추측한 뜻은 표시하지 않아요.')}</p>`;
   const dictionary=query.length<=40?`<a class="dictionary-link" href="https://ko.dict.naver.com/#/search?query=${encodeURIComponent(query)}" target="_blank" rel="noopener noreferrer">국어사전에서 찾기 ↗</a>`:'';
-  return `<div class="highlight-meaning">${entries.length&&query.length>40?'<small>선택한 구절에 포함된 낱말 풀이</small>':''}${content}${hanja}${dictionary}</div>`;
+  return `<div class="highlight-meaning">${head}${entries.length&&query.length>40?'<small>선택한 구절에 포함된 낱말 풀이</small>':''}${notes}${empty}${dictionary}</div>`;
 }
 
 // A highlight that ends on a word carrying a hanja gloss, e.g. 송죽(松竹), is widened to include the gloss
@@ -116,16 +121,20 @@ export function glossedText(work,h){
 }
 
 // Rendering for external lookups returned by the `meaning` edge function: {term,matched,dictionary,ai}.
-export function externalHTML(r,esc){
+export function externalHTML(r,esc,opts={}){
   const dict=Array.isArray(r?.dictionary)?r.dictionary:[],ai=r?.ai||null;
   const chosen=ai&&Number.isInteger(ai.sense)?ai.sense:null;
+  const hasAI=!!(ai&&(ai.context||(!dict.length&&ai.meaning)));
   const parts=[];
   dict.forEach((s,i)=>{
     if(chosen!==null&&i!==chosen)return;
     if(chosen===null&&i>=4)return;
-    parts.push(`<div class="meaning-entry dict"><p><strong>${esc(s.word)}</strong>${s.origin?` <span class="origin">${esc(s.origin)}</span>`:''}${s.pos?` <span class="origin">${esc(s.pos)}</span>`:''} · ${esc(s.definition)}</p><small>우리말샘 · 국립국어원${r.originMatched?' · 한자 일치':''}${chosen!==null?' · AI가 문맥에 맞게 고른 뜻':dict.length>4?` · 뜻 ${dict.length}개 중 4개`:''} · <a href="https://opendict.korean.go.kr/search/searchResult?query=${encodeURIComponent(s.word)}" target="_blank" rel="noopener noreferrer">사전 보기 ↗</a></small></div>`);
+    // With a head above, the word and its hanja are already shown; otherwise name the matched headword here.
+    const word=opts.head?'':`<strong>${esc(s.word)}</strong>${s.origin?` <span class="origin">${esc(s.origin)}</span>`:''} · `;
+    parts.push(`<div class="meaning-entry dict"><small class="meaning-label">우리말샘${s.pos?' · '+esc(s.pos):''}${r.originMatched?' · 한자 일치':''}${chosen!==null?' · AI가 문맥에 맞게 고른 뜻':dict.length>4?` · 뜻 ${dict.length}개 중 4개`:''} · <a href="https://opendict.korean.go.kr/search/searchResult?query=${encodeURIComponent(s.word)}" target="_blank" rel="noopener noreferrer">사전 보기 ↗</a></small><p>${word}${esc(s.definition)}</p></div>`);
   });
-  if(ai&&(ai.context||(!dict.length&&ai.meaning)))
-    parts.push(`<div class="meaning-entry ai"><p>${!dict.length&&ai.meaning?`<strong>${esc(ai.meaning)}</strong> · `:''}${esc(ai.context||'')}</p><small>AI 문맥 풀이 · 검토 필요 · ${esc(ai.model||'')}</small></div>`);
+  if(!dict.length&&hasAI)parts.push('<div class="meaning-entry dict"><small class="meaning-label">우리말샘</small><p class="meaning-none">사전에 없는 말이에요.</p></div>');
+  if(hasAI)
+    parts.push(`<div class="meaning-entry ai"><small class="meaning-label">AI 문맥 풀이 · 검토 필요 · ${esc(ai.model||'')}</small><p>${!dict.length&&ai.meaning?`<strong>${esc(ai.meaning)}</strong> · `:''}${esc(ai.context||'')}</p></div>`);
   return parts.join('')||'<p class="meaning-empty">사전에서도 찾지 못했어요. 추측한 뜻은 표시하지 않아요.</p>';
 }

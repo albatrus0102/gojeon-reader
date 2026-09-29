@@ -101,5 +101,16 @@ test('hanja in a highlight gets per-character glosses chosen by reading, without
  const body=w.body[0].text,h={start:0,end:4,text:'설빈화안'};
  assert.equal(glossedText(w,h),'설빈화안(雪鬢花顔)');
  const esc=s=>String(s).replaceAll('<','&lt;');const html=meaningHTML(w,h,esc);
- assert.ok(html.includes('한자 훈음')&&html.includes('살쩍 빈')&&!html.includes('교재 각주'));
+ assert.ok(html.includes('<span class="meaning-word">설빈화안</span>')&&html.includes('살쩍 빈')&&!html.includes('교재 각주'));
+ assert.ok(html.indexOf('meaning-head')<html.indexOf('meaning-empty'));   // hanja first
+ const long={start:0,end:body.length,text:body};assert.ok(!meaningHTML(w,long,esc).includes('meaning-word')&&meaningHTML(w,long,esc).includes('hanja-chip'));
+});
+test('order is hanja, textbook note, dictionary, AI; the dictionary names the word only when no head shows it',()=>{
+ const esc=s=>String(s).replaceAll('<','&lt;');
+ const r={dictionary:[{word:'청촉',pos:'명사',definition:'청을 들어주기를 부탁함.',origin:'請囑'}],ai:{sense:0,context:'부탁해 보면',model:'m'},originMatched:true};
+ const withHead=externalHTML(r,esc,{head:true}),bare=externalHTML(r,esc);
+ assert.ok(!withHead.includes('<strong>청촉</strong>')&&bare.includes('<strong>청촉</strong>'));
+ assert.ok(withHead.indexOf('우리말샘')<withHead.indexOf('AI 문맥 풀이')&&withHead.includes('한자 일치'));
+ const none=externalHTML({dictionary:[],ai:{sense:null,meaning:'고운 얼굴',context:'젊던 때',model:'m'}},esc,{head:true});
+ assert.ok(none.includes('사전에 없는 말이에요')&&none.indexOf('우리말샘')<none.indexOf('AI 문맥 풀이')&&!none.includes('meaning-empty'));
 });
