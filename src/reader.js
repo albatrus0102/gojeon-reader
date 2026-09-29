@@ -1,4 +1,4 @@
-import {meaningHTML,lookupMeanings,externalHTML} from './meanings.js';
+import {meaningHTML,lookupMeanings,externalHTML,includeGloss} from './meanings.js';
 export function mountReader(works,userId,onHighlights,lookupExternal=null){
 const WORKS=works;
 const $=s=>document.querySelector(s), KEY='classics-reader-cloud-'+userId;
@@ -67,7 +67,7 @@ function applyHighlights(){
 function captureSelection(){
  const sel=getSelection(),root=$('#reading');if(!root||!sel.rangeCount||sel.isCollapsed){if(!pending)$('#highlightBar').hidden=true;return;}
  const r=sel.getRangeAt(0);if(!root.contains(r.startContainer)||!root.contains(r.endContainer)){pending=null;$('#highlightBar').hidden=true;return;}
- const prefix=document.createRange();prefix.selectNodeContents(root);prefix.setEnd(r.startContainer,r.startOffset);const start=prefix.toString().length,end=start+r.toString().length;
+ const prefix=document.createRange();prefix.selectNodeContents(root);prefix.setEnd(r.startContainer,r.startOffset);const start=prefix.toString().length,end=includeGloss(root.textContent,start,start+r.toString().length);
  if(end>start&&r.toString().trim()){pending={work:current.id,start,end,text:root.textContent.slice(start,end)};$('#highlightBar').hidden=false;}
 }
 document.addEventListener('selectionchange',()=>{const s=getSelection();if(s.isCollapsed){pending=null;$('#highlightBar').hidden=true;}else captureSelection();});
@@ -78,7 +78,7 @@ function meaningSlot(w,h){return `<div class="meaning-slot" data-meaning="${esc(
 // Passage around the highlight, for the AI context note (never sent when no external lookup is configured).
 function contextOf(w,h){const body=w.body.map(b=>b.text).join('');const a=Math.max(0,h.start-150),b=Math.min(body.length,h.end+150);let s=body.slice(a,b);if(a>0)s='…'+s.slice(s.search(/[.!?”’"\s]/)+1);if(b<body.length){const cut=s.search(/[.!?”’"](?=[^.!?”’"]*$)/);s=(cut>h.end-a?s.slice(0,cut+1):s)+'…';}return s.trim();}
 // Fill slots that have no textbook note with dictionary/AI results from the edge function.
-function hydrateMeanings(root){if(!lookupExternal||!root)return;root.querySelectorAll('[data-meaning]').forEach(async slot=>{const h=state.highlights.find(x=>x.id===slot.dataset.meaning),w=h&&WORKS.find(w=>w.id===h.work);if(!w)return;const {entries,stale}=lookupMeanings(w,h);const term=h.text.trim();if(stale||entries.length||term.length<1||term.length>30)return;const empty=slot.querySelector('.meaning-empty');if(!empty)return;empty.className='meaning-loading';empty.textContent='우리말샘에서 찾는 중…';try{const r=await lookupExternal({work:w.id,term,context:contextOf(w,h)});if(!slot.isConnected)return;empty.outerHTML=externalHTML(r,esc);}catch(e){empty.className='meaning-empty';empty.textContent='사전 조회에 실패했어요. 연결 상태를 확인한 뒤 다시 열어 주세요.';}});}
+function hydrateMeanings(root){if(!lookupExternal||!root)return;root.querySelectorAll('[data-meaning]').forEach(async slot=>{const h=state.highlights.find(x=>x.id===slot.dataset.meaning),w=h&&WORKS.find(w=>w.id===h.work);if(!w)return;const {entries,stale}=lookupMeanings(w,h);const whole=w.body.map(b=>b.text).join(''),term=(h.text+whole.slice(h.end,includeGloss(whole,h.start,h.end))).trim();if(stale||entries.length||term.length<1||term.length>40)return;const empty=slot.querySelector('.meaning-empty');if(!empty)return;empty.className='meaning-loading';empty.textContent='우리말샘에서 찾는 중…';try{const r=await lookupExternal({work:w.id,term,context:contextOf(w,h)});if(!slot.isConnected)return;empty.outerHTML=externalHTML(r,esc);}catch(e){empty.className='meaning-empty';empty.textContent='사전 조회에 실패했어요. 연결 상태를 확인한 뒤 다시 열어 주세요.';}});}
 function askDelete(id){deleting=id;const h=state.highlights.find(h=>h.id===id);if(!h)return;$('#deleteText').textContent=h.text;let box=$('#deleteMeaning');if(!box){box=document.createElement('div');box.id='deleteMeaning';$('#deleteText').after(box);}box.innerHTML=meaningSlot(WORKS.find(w=>w.id===h.work),h);hydrateMeanings(box);$('#deleteDialog').showModal();}
 $('#confirmDelete').onclick=()=>{state.highlights=state.highlights.filter(h=>h.id!==deleting);persist();applyHighlights();renderSaved();$('#deleteDialog').close();toast('표시를 지웠어요');};
 function excerptLabel(h){const w=WORKS.find(w=>w.id===h.work);if(!w)return h.text;let offset=0,parts=[];for(const b of w.body){const end=offset+b.text.length;if(offset<h.end&&end>h.start)parts.push(b.text.slice(Math.max(0,h.start-offset),Math.min(b.text.length,h.end-offset)));offset=end;}return parts.join('\n\n');}

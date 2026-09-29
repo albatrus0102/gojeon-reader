@@ -91,19 +91,28 @@ Deno.serve(async (req) => {
   const admin = createClient(url, service);
   if (!body.refresh) {
     const {data: cached} = await admin.from('reader_meanings').select('term,matched,dictionary,ai').eq('work', work).eq('term', term).maybeSingle();
-    if (cached) return json({...cached, cached: true});
+    if (cached) return json({...cached, originMatched: !!cached.ai?.originMatched, cached: true});
   }
 
-  let matched: string | null = null, dictionary: Sense[] = [];
+  // A hanja gloss in the highlight, e.g. 명정(明政), pins the word: homonyms written with other hanja are dropped.
+  const hanja = term.match(/\(([\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]+)\)/)?.[1] ?? null;
+  let matched: string | null = null, dictionary: Sense[] = [], originMatched = false;
   for (const c of candidates(term)) {
-    try { dictionary = await opendict(c, dictKey); } catch (e) { console.error(e); return json({error: 'dictionary unavailable'}, 502); }
-    if (dictionary.length) { matched = c; break; }
+    let found: Sense[];
+    try { found = await opendict(c, dictKey); } catch (e) { console.error(e); return json({error: 'dictionary unavailable'}, 502); }
+    if (hanja && found.length) {
+      const same = found.filter((s) => s.origin === hanja);
+      if (same.length) { found = same; originMatched = true; }
+      else found = found.filter((s) => !s.origin);   // other hanja = a different word
+    }
+    if (found.length) { dictionary = found; matched = c; break; }
   }
   let ai: AI | null = null;
-  if (geminiKey && context) ai = await gemini(matched ?? stripGloss(term), context, dictionary, geminiKey);
+  const shown = (matched ?? stripGloss(term)) + (hanja ? `(${hanja})` : '');
+  if (geminiKey && context) ai = await gemini(shown, context, dictionary, geminiKey);
 
-  const row = {work, term, matched, dictionary, ai, updated_at: new Date().toISOString()};
+  const row = {work, term, matched, dictionary, ai: ai ? {...ai, originMatched} : (originMatched ? {sense: null, meaning: '', context: '', model: '', at: new Date().toISOString(), originMatched} : null), updated_at: new Date().toISOString()};
   const {error} = await admin.from('reader_meanings').upsert(row);
   if (error) console.error(error);
-  return json({term, matched, dictionary, ai, cached: false});
+  return json({term, matched, dictionary, ai: row.ai, originMatched, cached: false});
 });

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {lookupMeanings,meaningHTML,externalHTML} from '../src/meanings.js';
+import {lookupMeanings,meaningHTML,externalHTML,includeGloss} from '../src/meanings.js';
 const work=(text,notes,id='test')=>({id,body:[{text}],notes,source:'시험 PDF'});
 const mark=(w,text)=>({start:w.body[0].text.indexOf(text),end:w.body[0].text.indexOf(text)+text.length,text});
 test('existing highlights get exact source note without mutating saved ranges',()=>{
@@ -77,4 +77,12 @@ test('suffix check stops at a block boundary so a note at the end of a verse lin
  const body=w.body.map(b=>b.text).join('');
  assert.equal(lookupMeanings(w,{start:body.indexOf('산람'),end:body.indexOf('산람')+6,text:'산람(山嵐)'}).entries.length,1);
  const q=body.indexOf('수많은');assert.equal(lookupMeanings(w,{start:q,end:q+3,text:'수많은'}).entries[0].term,'수많은');
+});
+test('a selection is widened to take in the hanja gloss that follows or surrounds its end',()=>{
+ const body='너럭바위 위에 송죽(松竹)을 헤치고 정자를 얹었는데';const s=body.indexOf('송죽');
+ assert.equal(body.slice(s,includeGloss(body,s,s+2)),'송죽(松竹)');
+ assert.equal(body.slice(s,includeGloss(body,s,s+4)),'송죽(松竹)');           // ended inside the gloss
+ assert.equal(body.slice(s,includeGloss(body,s,s+6)),'송죽(松竹)');           // already complete
+ const t=body.indexOf('정자');assert.equal(includeGloss(body,t,t+2),t+2);       // no gloss: unchanged
+ const n='임은 (웃으며) 말했다';assert.equal(includeGloss(n,0,2),2);           // a non-hanja parenthesis is left alone
 });

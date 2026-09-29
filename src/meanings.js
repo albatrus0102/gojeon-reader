@@ -85,6 +85,18 @@ export function meaningHTML(work,h,esc){
   return `<div class="highlight-meaning">${entries.length&&query.length>40?'<small>선택한 구절에 포함된 낱말 풀이</small>':''}${content}${dictionary}</div>`;
 }
 
+// A highlight that ends on a word carrying a hanja gloss, e.g. 송죽(松竹), is widened to include the gloss
+// (also when the selection stopped inside the parentheses), so the saved text keeps the evidence for which word it is.
+const GLOSS=/^\([一-鿿㐀-䶿豈-﫿·,\s]+\)/u;
+export function includeGloss(body,start,end){
+  if(!(end>start))return end;
+  const after=body.slice(end).match(GLOSS);
+  if(after&&/[가-힣]/.test(body[end-1]))return end+after[0].length;
+  const open=body.lastIndexOf('(',end-1);
+  if(open>start&&!body.slice(open,end).includes(')')){const m=body.slice(open).match(GLOSS);if(m&&open+m[0].length>end)return open+m[0].length;}
+  return end;
+}
+
 // Rendering for external lookups returned by the `meaning` edge function: {term,matched,dictionary,ai}.
 export function externalHTML(r,esc){
   const dict=Array.isArray(r?.dictionary)?r.dictionary:[],ai=r?.ai||null;
@@ -93,7 +105,7 @@ export function externalHTML(r,esc){
   dict.forEach((s,i)=>{
     if(chosen!==null&&i!==chosen)return;
     if(chosen===null&&i>=4)return;
-    parts.push(`<div class="meaning-entry dict"><p><strong>${esc(s.word)}</strong>${s.origin?` <span class="origin">${esc(s.origin)}</span>`:''}${s.pos?` <span class="origin">${esc(s.pos)}</span>`:''} · ${esc(s.definition)}</p><small>우리말샘 · 국립국어원${chosen!==null?' · AI가 문맥에 맞게 고른 뜻':dict.length>4?` · 뜻 ${dict.length}개 중 4개`:''} · <a href="https://opendict.korean.go.kr/search/searchResult?query=${encodeURIComponent(s.word)}" target="_blank" rel="noopener noreferrer">사전 보기 ↗</a></small></div>`);
+    parts.push(`<div class="meaning-entry dict"><p><strong>${esc(s.word)}</strong>${s.origin?` <span class="origin">${esc(s.origin)}</span>`:''}${s.pos?` <span class="origin">${esc(s.pos)}</span>`:''} · ${esc(s.definition)}</p><small>우리말샘 · 국립국어원${r.originMatched?' · 한자 일치':''}${chosen!==null?' · AI가 문맥에 맞게 고른 뜻':dict.length>4?` · 뜻 ${dict.length}개 중 4개`:''} · <a href="https://opendict.korean.go.kr/search/searchResult?query=${encodeURIComponent(s.word)}" target="_blank" rel="noopener noreferrer">사전 보기 ↗</a></small></div>`);
   });
   if(ai&&(ai.context||(!dict.length&&ai.meaning)))
     parts.push(`<div class="meaning-entry ai"><p>${!dict.length&&ai.meaning?`<strong>${esc(ai.meaning)}</strong> · `:''}${esc(ai.context||'')}</p><small>AI 문맥 풀이 · 검토 필요 · ${esc(ai.model||'')}</small></div>`);
