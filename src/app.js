@@ -3,6 +3,7 @@ import {createClient} from '@supabase/supabase-js';
 import {config} from './config.js';
 import {mountReader} from './reader.js';
 import {attachNotes} from './notes.js';
+import {attachSummaries} from './summaries.js';
 import {HighlightSync} from './sync.js';
 import body from './reader-body.html';
 const app=document.getElementById('app');let client,reader,sync,user,works,notes;
@@ -10,12 +11,13 @@ function login(message=''){showLogin({root:app,auth:client.auth,onSession:openRe
 function loginError(error){const messages={otp_expired:'로그인 링크가 만료되었거나 이미 사용되었습니다.',invalid_credentials:'이메일 또는 비밀번호를 확인해 주세요. 비밀번호를 아직 설정하지 않았다면 로그인된 Safari의 ‘가 · 설정’에서 먼저 설정하세요.',weak_password:'비밀번호가 너무 단순합니다. 더 긴 비밀번호를 사용해 주세요.',over_email_send_rate_limit:'이메일 전송 횟수 제한에 도달했습니다. 잠시 후 다시 시도하거나 이미 받은 최신 메일을 확인해 주세요.',over_request_rate_limit:'요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.',email_address_not_authorized:'현재 메일 발송 설정에서 이 이메일로 보낼 수 없습니다. 로그인 설정을 확인해야 합니다.'};return messages[error.code]||'로그인 처리 중 오류가 발생했습니다: '+(error.code||error.message||'연결 오류');}
 function status(text){const n=document.getElementById('cloudStatus');if(n)n.textContent=text;}
 async function openReader(session){user=session.user;await client.rpc('reader_join');const membership=await client.from('reader_members').select('user_id').eq('user_id',user.id).maybeSingle();if(membership.error||!membership.data){login('로그인은 완료됐지만 서재에 등록된 이메일과 다릅니다.\n현재 로그인: '+user.email+'\n접근 계정 설정을 확인해야 합니다.');const switchAccount=document.createElement('button');switchAccount.textContent='다른 계정으로 로그인';switchAccount.onclick=async()=>{await client.auth.signOut();location.reload();};document.querySelector('.login').append(switchAccount);return;}
- const {data,error}=await client.storage.from('reader-private').download('catalogue-2027-v4.json');if(error){login('본문을 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 로그인해 주세요.');return;}
+ const {data,error}=await client.storage.from('reader-private').download('catalogue-2027-v5.json');if(error){login('본문을 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 로그인해 주세요.');return;}
  works=JSON.parse(await data.text());app.innerHTML=body;let first=[];
  notes=attachNotes({key:'reader-notes-'+user.id,remote:{async read(){const {data,error}=await client.from('reader_notes').select('work_id,body,version');if(error)throw error;return data;},async write(work,body,version){const {data,error}=await client.rpc('reader_save_note',{note_work:work,note_body:body,note_base:version});if(error)throw error;return data;}}});
  // External dictionary/AI lookups go through the `meaning` edge function; results are cached per device.
  const meaningKey='reader-meaning-cache-'+user.id,meaningCache=new Map();try{for(const [k,v] of JSON.parse(localStorage.getItem(meaningKey)||'[]'))meaningCache.set(k,v);}catch{}
  async function lookupExternal({work,term,context,gloss}){const k=work+'\n'+term;if(meaningCache.has(k))return meaningCache.get(k);const {data,error}=await client.functions.invoke('meaning',{body:{work,term,context,gloss}});if(error||!data||data.error)throw error||Error(data?.error||'lookup');meaningCache.set(k,data);try{localStorage.setItem(meaningKey,JSON.stringify([...meaningCache].slice(-400)));}catch{}return data;}
+ attachSummaries({store:notes});
  reader=mountReader(works,user.id,items=>{if(sync){if(sync.record(items))sync.flush();}else first=items;},lookupExternal);
  const tools=document.createElement('div');tools.id='cloudTools';tools.innerHTML='<p id="cloudStatus" role="status">동기화 중</p><button id="syncNow">지금 동기화</button><button id="exportHighlights">표시 백업</button><button id="importHighlights">백업 가져오기</button><input id="importFile" type="file" accept="application/json,.json"><button id="signOut">로그아웃</button>';document.getElementById('settings').append(tools);
  const pw=document.createElement('details');pw.innerHTML='<summary>리더 비밀번호 설정</summary><p class="hint">한 번 설정하면 다른 기기에서도 이메일과 이 비밀번호로 로그인할 수 있습니다. Supabase 관리용 비밀번호와는 별개입니다.</p><form id="setPasswordForm"><label for="newPassword">새 비밀번호 (10자 이상)</label><input id="newPassword" type="password" minlength="10" autocomplete="new-password" required><label for="confirmPassword">비밀번호 확인</label><input id="confirmPassword" type="password" minlength="10" autocomplete="new-password" required><button>비밀번호 저장</button><p id="passwordStatus" role="status"></p></form>';tools.append(pw);
