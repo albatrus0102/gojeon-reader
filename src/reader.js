@@ -28,7 +28,8 @@ function showHome(){
 }
 // Verse works (가사·시조·민요) keep the printed line breaks; each line is a block so saved ranges work exactly like prose.
 // C1, C2 … chunk labels on the first block of each passage chunk (drawn with CSS, so saved ranges are untouched).
-const segAttr=(w,i)=>{const s=(w.segments||[]).find(s=>s.from===i);return s?` data-seg="${s.label}"`:'';};
+const SEG_MARK=/^\s*[\[\(（［]\s*(앞부분|중략|뒷부분|중간)/;
+const segAttr=(w,i)=>{const s=(w.segments||[]).find(s=>{const prev=w.body[s.from-1];return (prev&&prev.type==='stage'&&SEG_MARK.test(prev.text)&&prev.text.trim().length>14?s.from-1:s.from)===i;});return s?` data-seg="${s.label}"`:'';};
 function verseHTML(w,bookLabel){
  const blocks=w.body.map((b,i)=>b.type==='stanza'?`<p id="b${i}" data-block="${i}"${segAttr(w,i)} class="stanza">${esc(b.text)}</p>`:b.type==='break'?`<p id="b${i}" data-block="${i}"${segAttr(w,i)} class="break"></p>`:b.type==='omit'?`<p id="b${i}" data-block="${i}"${segAttr(w,i)} class="omit">${esc(b.text)}</p>`:`<p id="b${i}" data-block="${i}"${segAttr(w,i)} class="verse">${esc(b.text)}</p>`).join('');
  const intro=(w.intro||[]).map(s=>`<p>${esc(s.text).replace(/\n/g,'<br>')}</p><p class="source">${esc(s.source)}</p>`).join('');
